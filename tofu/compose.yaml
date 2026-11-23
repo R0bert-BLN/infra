@@ -1,0 +1,23 @@
+services:
+  tofu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /work/envs/${TOFU_ENV:?set TOFU_ENV in .env}
+    profiles: ["tools"]
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      HOME: /tmp
+      TF_PLUGIN_CACHE_DIR: /work/.plugin-cache
+      TF_VAR_pg_superuser: ${POSTGRES_SUPERUSER}
+      TF_VAR_pg_superuser_password: ${POSTGRES_SUPERUSER_PASSWORD}
+      TF_VAR_state_passphrase: ${TOFU_STATE_PASSPHRASE:?set TOFU_STATE_PASSPHRASE in .env}
+    volumes:
+      - ./:/work
+    networks: ["data", "edge"]
+
+networks:
+  data:
+    external: true
+  edge:
+    external: true
