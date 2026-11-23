@@ -1,0 +1,7 @@
+name: infra
+
+include:
+  - traefik/compose.yaml
+  - postgres/compose.yaml
+  - zitadel/compose.yaml
+  - tofu/compose.yaml
