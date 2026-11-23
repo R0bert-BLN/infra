@@ -1,0 +1,28 @@
+services:
+  mailpit:
+    image: axllent/mailpit:${MAILPIT_VERSION:-v1.34}
+    restart: unless-stopped
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: 1000
+    profiles: ["dev"]
+    volumes:
+      - mailpit-data:/data
+    networks: [edge, data]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.mailpit.entrypoints=web
+      - traefik.http.routers.mailpit.rule=Host(`mail.${DOMAIN:?set DOMAIN in .env}`)
+      - traefik.http.routers.mailpit.middlewares=public@file
+      - traefik.http.services.mailpit.loadbalancer.server.port=8025
+
+volumes:
+  mailpit-data:
+
+networks:
+  edge:
+    name: edge
+    external: true
+  data:
+    name: data
+    external: true

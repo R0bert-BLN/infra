@@ -5,3 +5,4 @@ include:
   - postgres/compose.yaml
   - zitadel/compose.yaml
   - tofu/compose.yaml
+  - mailpit/compose.yaml
