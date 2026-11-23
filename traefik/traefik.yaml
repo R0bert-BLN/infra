@@ -1,0 +1,30 @@
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+entryPoints:
+  web:
+    address: ":80"
+    forwardedHeaders:
+      trustedIPs:
+        - "10.123.0.0/24"
+  traefik:
+    address: ":8080"
+
+providers:
+  docker:
+    exposedByDefault: false
+    network: edge
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+api:
+  dashboard: true
+
+ping: {}
+
+log:
+  level: INFO
+
+accessLog: {}
