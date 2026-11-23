@@ -1,0 +1,10 @@
+.env
+*.local
+/docs/architecture.md
+.terraform/
+.plugin-cache/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+!*.tfvars.example
+zitadel-key.json
