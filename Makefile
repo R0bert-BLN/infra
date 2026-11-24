@@ -13,11 +13,10 @@ networks: ## Create the shared networks
 	@docker network inspect data >/dev/null 2>&1 || docker network create data
 
 setup: networks ## Run the setup jobs
-	$(COMPOSE) run --rm -T zitadel-init
-	$(COMPOSE) run --rm -T --no-deps zitadel-setup
+	$(COMPOSE) run --rm -T keycloak-db-init
 
 up: networks setup ## Start all services
-	$(COMPOSE) up -d --wait
+	$(COMPOSE) up -d --build --wait
 
 down: ## Stop all services
 	$(COMPOSE) --profile "*" down
@@ -41,7 +40,7 @@ tofu: networks ## Run OpenTofu
 
 check: networks ## Run the checks
 	@ mkdir -p tofu/.plugin-cache
-	$(COMPOSE) config -q
+	$(COMPOSE) --profile "*" config -q
 	$(TOFU) -chdir=/work fmt -check -recursive
 	$(TOFU) init -backend=false -input=false
 	$(TOFU) validate

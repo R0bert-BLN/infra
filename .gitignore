@@ -7,4 +7,3 @@
 *.tfstate.backup
 *.tfvars
 !*.tfvars.example
-zitadel-key.json

@@ -1,61 +1,94 @@
 # infra
 
-Shared infrastructure for personal projects, run with Docker Compose. One stack provides routing,
-a database and identity for every app, and the same config runs on a dev laptop, on a home
-server (private, through Tailscale) and in prod (public, through Cloudflare Tunnel).
+Shared infrastructure for self-hosted projects: reverse proxy, database, identity provider
+and provisioning, defined with Docker Compose and OpenTofu. The same stack runs in dev
+(laptop), on the home server (Tailscale) and in prod (Cloudflare Tunnel).
 
-| Component | Role |
+## Stack
+
+| Component | Purpose |
 |---|---|
-| **Traefik** | Reverse proxy. Routes `<name>.${DOMAIN}` to containers based on Docker labels |
-| **Postgres + PostGIS** | One shared server; each project and environment gets its own role and database |
-| **Zitadel v4** | OIDC identity provider (API + login UI). Each project gets its own organization |
-| **OpenTofu** | Provisions the per-project databases, organizations and OIDC clients. Runs in a container |
+| Traefik | Reverse proxy, routes `<name>.${DOMAIN}` via Docker labels |
+| Postgres + PostGIS | Shared database server, one role and database per project and environment |
+| Keycloak | OIDC provider at `auth.${DOMAIN}`, one realm per project and environment |
+| Mailpit | Dev-only SMTP sink at `mail.${DOMAIN}` |
+| OpenTofu | Provisions databases, realms and OIDC clients |
 
-Two Docker networks connect everything: `edge` (Traefik and anything it routes to) and
-`data` (Postgres and its clients). Nothing listens on a public port; Traefik and Postgres
-bind to `127.0.0.1`.
+Networks: `edge` (everything behind Traefik) and `data` (Postgres clients). Host ports bind
+to `127.0.0.1` only.
 
-## Modes
+| Profile | Services |
+|---|---|
+| *(none)* | `traefik`, `postgres`, `keycloak` |
+| `dev` | `mailpit`, `whoami` |
+| `setup` | `keycloak-db-init` |
+| `tools` | `tofu` |
 
-Set these four variables together in `.env`:
+## Requirements
 
-| Variable | Dev (laptop) | Server (Tailscale Services) | Prod (Cloudflare) |
-|---|---|---|---|
-| `DOMAIN` | `localhost` | `<tailnet>.ts.net` | `<your-domain>` |
-| `PUBLIC_SCHEME` | `http` | `https` | `https` |
-| `PUBLIC_PORT` | `80` | `443` | `443` |
-| `PUBLIC_SECURE` | `false` | `true` | `true` |
+Docker with Compose v2, `make`, `openssl`.
 
-In dev, keep `TRAEFIK_PORT` equal to `PUBLIC_PORT` (`80`).
-
-## Setup
-
-1. `cp .env.example .env` and fill it in:
-   - passwords: `openssl rand -base64 24`
-   - `ZITADEL_ADMIN_PASSWORD`: 8+ characters with an uppercase letter, a lowercase letter,
-     a digit and a symbol, e.g. `echo "$(openssl rand -base64 18)Aa1!"`
-   - `ZITADEL_MASTERKEY`: `openssl rand -hex 16` (exactly 32 characters)
-   - `ZITADEL_LOGIN_COOKIE_SECRET`, `TOFU_STATE_PASSPHRASE`: `openssl rand -base64 32`
-   - `TOFU_ENV`: `dev` on a laptop, `server` on the server
-2. `make up` creates the networks, runs the one-shot Zitadel jobs (init, then setup with
-   the migrations) and starts everything.
-3. Zitadel console: `<scheme>://auth.<DOMAIN>/ui/console`. Log in as
-   `admin@zitadel.auth.<DOMAIN>` with `ZITADEL_ADMIN_PASSWORD` (you'll change it on first
-   login). Traefik dashboard: `http://localhost:8080/dashboard/`.
-
-On the server, publish Traefik through Tailscale Services:
+## Configuration
 
 ```sh
-sudo tailscale serve --service=svc:auth    --https=443 http://127.0.0.1:80
-sudo tailscale serve --service=svc:traefik --https=443 http://127.0.0.1:8080
+cp .env.example .env
 ```
 
-`make help` lists the other targets.
+| Key | Dev | Server |
+|---|---|---|
+| `DOMAIN` | `localhost` | `<tailnet>.ts.net` / `<domain>` |
+| `PUBLIC_SCHEME` | `http` | `https` |
+| `COMPOSE_PROFILES` | `dev` | *(empty)* |
+| `TOFU_ENV` | `dev` | `server` |
+
+| Key | Value |
+|---|---|
+| `POSTGRES_SUPERUSER` | e.g. `postgres` |
+| `POSTGRES_SUPERUSER_PASSWORD`, `KEYCLOAK_DB_PASSWORD` | `openssl rand -base64 24` |
+| `KEYCLOAK_ADMIN_USERNAME`, `KEYCLOAK_ADMIN_PASSWORD` | temporary admin, first start only |
+| `TOFU_STATE_PASSPHRASE` | `openssl rand -base64 32` |
+| `KEYCLOAK_TOFU_CLIENT_SECRET` | empty until [Keycloak setup](#keycloak-setup) |
+
+Leave host ports and image versions empty to use the defaults. In dev, `TRAEFIK_PORT` must
+stay `80`.
+
+## Getting started
+
+```sh
+make up
+```
+
+| URL | Service |
+|---|---|
+| `http://auth.localhost/admin` | Keycloak admin console |
+| `http://mail.localhost` | Mailpit |
+| `http://whoami.localhost` | Request echo |
+| `http://localhost:8080/dashboard/` | Traefik dashboard |
+
+### Keycloak setup
+
+Once per Keycloak instance, in the `master` realm:
+
+1. Log in with the temporary admin.
+2. **Users → Add user**: set a password and assign the `admin` realm role. Log in as this
+   user and delete the temporary admin.
+3. **Clients → Create client**, Client ID `tofu`: Client authentication **On**, Standard
+   flow **Off**, Direct access grants **Off**, Service accounts roles **On**.
+4. **Service accounts roles**: assign the `admin` realm role.
+5. **Credentials**: copy the secret to `.env` as `KEYCLOAK_TOFU_CLIENT_SECRET`.
+
+### Provisioning
+
+```sh
+make tofu args=init
+make tofu args=plan
+make tofu args=apply
+make tofu args="output -raw squadplay_database_url"
+```
 
 ## Adding a project
 
-**Routing.** Join the external `edge` network (and `data` if the app needs Postgres), then
-add labels:
+Compose (in the project repository):
 
 ```yaml
 services:
@@ -72,22 +105,30 @@ networks:
   data: { external: true }
 ```
 
-From inside containers, Postgres is `postgres:5432` and Zitadel is `http://auth.localhost`
-in dev (a network alias on Traefik).
-
-**Database and login.** Add one file per project in `tofu/envs/<TOFU_ENV>/`, e.g.
-`myapp.tf`, that calls the `project` module. Give it `web` (a backend with a client secret),
-`mobile` (a native app using PKCE, no secret), or both:
+OpenTofu, `tofu/envs/<TOFU_ENV>/myapp.tf`. Every block is optional; omit `database` or
+`auth` to skip it.
 
 ```hcl
 module "myapp_dev" {
-  source   = "../../modules/project"
-  name     = "myapp"
-  env      = "dev"
-  dev_mode = true # allows http:// redirect URIs
+  source = "../../modules/project"
 
-  web = {
-    redirect_uris = ["http://myapp.localhost/auth/callback"]
+  name         = "myapp"
+  env          = "dev"
+  keycloak_url = local.keycloak_url
+  smtp         = local.smtp
+
+  database = {}
+
+  auth = {
+    display_name = "My App"
+    email_from   = "hello@myapp.localhost" # default: noreply@myapp.localhost
+
+    web = {
+      redirect_uris = ["http://myapp.localhost/auth/callback"]
+    }
+    mobile = {
+      redirect_uris = ["com.myapp.app:/callback"]
+    }
   }
 }
 
@@ -96,28 +137,40 @@ output "myapp_database_url" {
   sensitive = true
 }
 
-output "myapp_web_client_id" {
-  value = module.myapp_dev.web_client_id
+output "myapp_issuer_url" {
+  value = module.myapp_dev.issuer_url
 }
 ```
 
-This creates the role and database `myapp_dev`, plus a Zitadel organization, project and
-OIDC app named `myapp-dev`. The module also outputs `web_client_secret`,
-`mobile_client_id` and `zitadel_org_id`.
+Module outputs: `database_url`, `issuer_url`, `web_client_id`, `web_client_secret`,
+`mobile_client_id`.
 
-## OpenTofu
+Inside containers: Postgres is `postgres:5432`, Keycloak (dev) is `http://auth.localhost`,
+SMTP (dev) is `mailpit:1025`.
 
-One-time setup:
+## Server
 
-1. In the Zitadel console, create a service user `tofu` (JWT token type), add a JSON key
-   and save it as `tofu/envs/<TOFU_ENV>/zitadel-key.json` (gitignored).
-2. Give it the **IAM Owner** instance role. It needs this to create organizations.
-
-Then:
+Create `tofu/envs/server` from `envs/dev` with the server URLs, then publish Traefik through
+Tailscale Services:
 
 ```sh
-make tofu args=init
-make tofu args=plan
-make tofu args=apply
-make tofu args="output -raw myapp_database_url"
+sudo tailscale serve --service=svc:auth    --https=443 http://127.0.0.1:80
+sudo tailscale serve --service=svc:traefik --https=443 http://127.0.0.1:8080
+```
+
+## Commands
+
+| Command | Description |
+|---|---|
+| `make up` | Create networks, run setup jobs, build and start services |
+| `make down` | Stop all services, all profiles |
+| `make ps` / `make logs s=<service>` | Status / logs |
+| `make tofu args="..."` | Run OpenTofu in `tofu/envs/${TOFU_ENV}` |
+| `make check` | Validate compose, `tofu fmt`, `tofu validate` (also run in CI) |
+
+Reset dev (deletes all data):
+
+```sh
+docker compose --env-file .env --profile "*" down -v
+rm tofu/envs/dev/terraform.tfstate*
 ```

@@ -3,6 +3,6 @@ name: infra
 include:
   - traefik/compose.yaml
   - postgres/compose.yaml
-  - zitadel/compose.yaml
   - tofu/compose.yaml
   - mailpit/compose.yaml
+  - keycloak/compose.yaml
