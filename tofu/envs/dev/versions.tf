@@ -6,9 +6,9 @@ terraform {
       source  = "cyrilgdn/postgresql"
       version = "~> 1.27"
     }
-    zitadel = {
-      source  = "zitadel/zitadel"
-      version = "~> 3.8"
+    keycloak = {
+      source  = "keycloak/keycloak"
+      version = "~> 5.11"
     }
     random = {
       source  = "hashicorp/random"

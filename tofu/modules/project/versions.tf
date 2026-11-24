@@ -3,8 +3,8 @@ terraform {
     postgresql = {
       source = "cyrilgdn/postgresql"
     }
-    zitadel = {
-      source = "zitadel/zitadel"
+    keycloak = {
+      source = "keycloak/keycloak"
     }
     random = {
       source = "hashicorp/random"

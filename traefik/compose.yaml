@@ -25,7 +25,7 @@ services:
 
   whoami:
     image: traefik/whoami:${TRAEFIK_WHOAMI_VERSION:-v1.10.3}
-    profiles: [tools]
+    profiles: [dev]
     networks: [edge]
     labels:
       - traefik.enable=true

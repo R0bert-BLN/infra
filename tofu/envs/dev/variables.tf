@@ -14,3 +14,14 @@ variable "pg_superuser_password" {
   type        = string
   sensitive   = true
 }
+
+variable "keycloak_client_secret" {
+  description = "Secret of the tofu client in the master realm"
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = length(var.keycloak_client_secret) > 0
+    error_message = "Set KEYCLOAK_TOFU_CLIENT_SECRET in .env."
+  }
+}

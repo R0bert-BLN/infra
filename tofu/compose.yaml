@@ -12,6 +12,7 @@ services:
       TF_VAR_pg_superuser: ${POSTGRES_SUPERUSER}
       TF_VAR_pg_superuser_password: ${POSTGRES_SUPERUSER_PASSWORD}
       TF_VAR_state_passphrase: ${TOFU_STATE_PASSPHRASE:?set TOFU_STATE_PASSPHRASE in .env}
+      TF_VAR_keycloak_client_secret: ${KEYCLOAK_TOFU_CLIENT_SECRET:-}
     volumes:
       - ./:/work
     networks: ["data", "edge"]

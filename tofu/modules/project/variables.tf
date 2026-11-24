@@ -8,25 +8,48 @@ variable "env" {
   type        = string
 }
 
-variable "web" {
-  description = "Web/backend OIDC client"
+variable "keycloak_url" {
+  description = "Public Keycloak URL used to build the issuer URL"
+  type        = string
+}
+
+variable "smtp" {
+  description = "Mail server shared by every realm in this environment. null = no emails"
   type = object({
-    redirect_uris             = list(string)
-    post_logout_redirect_uris = optional(list(string), [])
+    host        = string
+    port        = optional(number, 25)
+    from_domain = string
   })
   default = null
 }
 
-variable "mobile" {
-  description = "Mobile OIDC client"
+variable "database" {
+  description = "Postgres role and database. null = the project has no database"
   type = object({
-    redirect_uris             = list(string)
-    post_logout_redirect_uris = optional(list(string), [])
+    connection_limit = optional(number, 20)
   })
   default = null
 }
 
-variable "dev_mode" {
-  description = "Allow http:// redirect URIs"
-  type        = bool
+variable "auth" {
+  description = "Keycloak realm and OIDC clients. null = the project has no login"
+  type = object({
+    display_name         = optional(string)
+    registration_allowed = optional(bool, true)
+
+    email_from      = optional(string)
+    email_from_name = optional(string)
+
+    web = optional(object({
+      redirect_uris             = list(string)
+      post_logout_redirect_uris = optional(list(string), [])
+      web_origins               = optional(list(string), ["+"])
+    }))
+
+    mobile = optional(object({
+      redirect_uris             = list(string)
+      post_logout_redirect_uris = optional(list(string), [])
+    }))
+  })
+  default = null
 }

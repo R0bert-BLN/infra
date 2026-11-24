@@ -7,9 +7,8 @@ provider "postgresql" {
   connect_timeout = 15
 }
 
-provider "zitadel" {
-  domain           = "auth.localhost"
-  insecure         = true
-  port             = "80"
-  jwt_profile_file = "${path.module}/zitadel-key.json"
+provider "keycloak" {
+  url           = local.keycloak_url
+  client_id     = "tofu"
+  client_secret = var.keycloak_client_secret
 }

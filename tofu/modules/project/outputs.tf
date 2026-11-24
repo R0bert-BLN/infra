@@ -1,26 +1,22 @@
 output "database_url" {
-  description = "Connection string as seen from containers on the data network"
-  value       = "postgres://${postgresql_role.this.name}:${random_password.this.result}@postgres:5432/${postgresql_database.this.name}?sslmode=disable"
-  sensitive   = true
+  value     = one(module.database[*].url)
+  sensitive = true
 }
 
-output "zitadel_org_id" {
-  description = "Send as scope urn:zitadel:iam:org:id:<id> so users log in and register in this org"
-  value       = zitadel_org.this.id
+output "issuer_url" {
+  description = "OIDC issuer; discovery is at <issuer>/.well-known/openid-configuration"
+  value       = var.auth == null ? null : "${var.keycloak_url}/realms/${module.auth[0].realm}"
 }
 
 output "web_client_id" {
-  description = "Confidential client: authenticates with client_id + client_secret"
-  value       = nonsensitive(one(zitadel_application_oidc.web[*].client_id))
+  value = one(module.auth[*].web_client_id)
 }
 
 output "web_client_secret" {
-  description = "Confidential client: authenticates with client_id + client_secret"
-  value       = one(zitadel_application_oidc.web[*].client_secret)
-  sensitive   = true
+  value     = one(module.auth[*].web_client_secret)
+  sensitive = true
 }
 
 output "mobile_client_id" {
-  description = "Public client: no secret, the mobile apps uses PKCE"
-  value       = nonsensitive(one(zitadel_application_oidc.mobile[*].client_id))
+  value = one(module.auth[*].mobile_client_id)
 }
