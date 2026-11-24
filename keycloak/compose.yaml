@@ -1,0 +1,68 @@
+services:
+  keycloak-db-init:
+    image: postgis/postgis:${POSTGRES_VERSION:-18-3.6}
+    profiles: [setup]
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_SUPERUSER:?set POSTGRES_SUPERUSER in .env}
+      PGPASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?set POSTGRES_SUPERUSER_PASSWORD in .env}
+      PGDATABASE: postgres
+      KC_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set KEYCLOAK_DB_PASSWORD in .env}
+    command:
+      - sh
+      - -c
+      - >-
+        psql -v ON_ERROR_STOP=1
+        -v kc_user=keycloak
+        -v kc_db=keycloak
+        -v kc_password="$$KC_PASSWORD"
+        -f /init-db.sql
+    volumes:
+      - ./init-db.sql:/init-db.sql:ro
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+  keycloak:
+    build: .
+    command: ["start", "--optimized"]
+    restart: unless-stopped
+    environment:
+      KC_DB_URL_HOST: postgres
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set KEYCLOAK_DB_PASSWORD in .env}
+      KC_HOSTNAME: ${PUBLIC_SCHEME:?set PUBLIC_SCHEME in .env}://auth.${DOMAIN:?set DOMAIN in .env}
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_PROXY_TRUSTED_ADDRESSES: 10.123.0.0/24
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:?set KEYCLOAK_ADMIN_USERNAME in .env}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.keycloak.entrypoints=web
+      - traefik.http.routers.keycloak.rule=Host(`auth.${DOMAIN}`)
+      - traefik.http.routers.keycloak.middlewares=compress@file
+      - traefik.http.services.keycloak.loadbalancer.server.port=8080
+    networks: [edge, data]
+    healthcheck:
+      test: ["CMD", "bash", "-c", "{ printf 'HEAD /health/ready HTTP/1.0\\r\\n\\r\\n' >&0; grep 'HTTP/1.0 200'; } 0<>/dev/tcp/localhost/9000"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak-db-init:
+        condition: service_completed_successfully
+        required: false
+
+networks:
+  edge:
+    name: edge
+    external: true
+  data:
+    name: data
+    external: true
